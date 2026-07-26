@@ -1,0 +1,12 @@
+{
+  "name": "myj-webhook",
+  "version": "1.0.0",
+  "description": "Serveur webhook myJ pour recevoir les alertes TradingView (XAUUSD SMC)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}
