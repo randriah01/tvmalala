@@ -72,6 +72,78 @@ app.get('/alerts', (req, res) => {
   res.json(alerts.slice(-limit).reverse());
 });
 
+// ---------------- TABLEAU DE BORD ----------------
+function escapeHtml(str) {
+  return String(str).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+app.get('/dashboard', (req, res) => {
+  if (req.query.secret !== SECRET) {
+    return res.status(401).send('Secret invalide. Ajoute ?secret=ton_secret à l\'URL.');
+  }
+
+  const heartbeats = alerts.filter(a => a.raw && a.raw.type === 'heartbeat');
+  const entries = alerts.filter(a => a.raw && a.raw.type === 'ict_mtf_entry').slice(-10).reverse();
+  const latest = heartbeats.length ? heartbeats[heartbeats.length - 1] : null;
+
+  const biasColor = (v) => v === 'bullish' ? '#1fae5c' : v === 'bearish' ? '#e0453c' : '#666';
+  const html = `<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="refresh" content="60">
+<title>myJ - Tableau de bord XAUUSD</title>
+<style>
+  body { background:#0f1115; color:#e6e6e6; font-family: -apple-system, Segoe UI, Roboto, sans-serif; margin:0; padding:24px; }
+  h1 { font-size:22px; margin-bottom:4px; }
+  .sub { color:#888; font-size:13px; margin-bottom:24px; }
+  .grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:14px; margin-bottom:32px; }
+  .card { background:#1a1d24; border-radius:10px; padding:16px; border:1px solid #2a2d35; }
+  .card .label { font-size:12px; color:#999; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px; }
+  .card .value { font-size:20px; font-weight:600; }
+  table { width:100%; border-collapse: collapse; margin-top:8px; }
+  th, td { text-align:left; padding:10px 12px; border-bottom:1px solid #2a2d35; font-size:13px; }
+  th { color:#999; text-transform:uppercase; font-size:11px; }
+  .long { color:#1fae5c; font-weight:600; }
+  .short { color:#e0453c; font-weight:600; }
+  .empty { color:#666; font-style:italic; padding:20px 0; }
+  .price { font-size:26px; font-weight:700; margin-bottom:2px; }
+</style>
+</head>
+<body>
+  <h1>myJ — XAUUSD</h1>
+  <div class="sub">Dernière mise à jour : ${latest ? escapeHtml(latest.receivedAt) : 'aucune donnée reçue encore'} · rafraîchi automatiquement toutes les 60s</div>
+
+  ${latest ? `
+  <div class="price">${escapeHtml(latest.raw.price)} $</div>
+  <div class="grid">
+    <div class="card"><div class="label">Biais Daily</div><div class="value" style="color:${biasColor(latest.raw.dailyBias)}">${escapeHtml((latest.raw.dailyBias || '-').toUpperCase())}</div></div>
+    <div class="card"><div class="label">Tendance 4H</div><div class="value">${escapeHtml((latest.raw.trend4h || '-').toUpperCase())}</div></div>
+    <div class="card"><div class="label">Zone</div><div class="value">${escapeHtml((latest.raw.zone || '-').toUpperCase())}</div></div>
+    <div class="card"><div class="label">StochRSI 15m</div><div class="value">${escapeHtml(latest.raw.stochRSI15m)}</div></div>
+    <div class="card"><div class="label">Kill Zone</div><div class="value">${latest.raw.killZone === true || latest.raw.killZone === 'true' ? 'ACTIVE ✅' : 'inactive'}</div></div>
+    <div class="card"><div class="label">Setup en attente</div><div class="value" style="color:${biasColor(latest.raw.pendingSetup)}">${escapeHtml((latest.raw.pendingSetup || 'none').toUpperCase())}</div></div>
+  </div>
+  ` : '<div class="empty">Aucun heartbeat reçu encore — vérifie que l\'alerte "Any alert() function call" est bien active sur TradingView.</div>'}
+
+  <h2>Derniers signaux d'entrée</h2>
+  ${entries.length ? `
+  <table>
+    <tr><th>Heure</th><th>Direction</th><th>Prix</th><th>Note</th></tr>
+    ${entries.map(e => `<tr>
+      <td>${escapeHtml(e.receivedAt)}</td>
+      <td class="${e.direction}">${escapeHtml((e.direction || '-').toUpperCase())}</td>
+      <td>${escapeHtml(e.price)}</td>
+      <td>${escapeHtml(e.note || '')}</td>
+    </tr>`).join('')}
+  </table>
+  ` : '<div class="empty">Aucun signal d\'entrée pour l\'instant.</div>'}
+</body>
+</html>`;
+
+  res.send(html);
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`myJ webhook server running on port ${PORT}`);
